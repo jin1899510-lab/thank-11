@@ -15,20 +15,17 @@ const extractJson = (text: string): string => {
 
 /**
  * API 키 연결 테스트용 함수
- * 주입된 API 키를 사용하여 가장 가벼운 모델로 응답을 확인합니다.
  */
 export const testConnection = async (): Promise<boolean> => {
   try {
-    // window.aistudio.openSelectKey() 이후 process.env.API_KEY가 업데이트되므로 
-    // 매번 새로운 인스턴스를 생성하여 테스트해야 합니다.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: "ping",
     });
     return !!response.text;
   } catch (error) {
-    console.error("API Key Test Failed:", error);
+    console.error("API Key Verification Failed:", error);
     return false;
   }
 };
@@ -44,40 +41,18 @@ export const generateBlueprint = async (
   additionalInstructions?: string,
   industryType: 'general' | 'visual' = 'general'
 ): Promise<Blueprint> => {
-  // 생성 시점에 항상 최신 주입된 API 키 사용
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // 호출 직전에 인스턴스 생성하여 주입된 키가 즉시 반영되도록 함
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
   
   const enabledSections = selectedSections.filter(s => s.enabled);
-  const activeSectionNames = enabledSections.map(s => `${s.id}(${s.name})`);
-
   const visualPromptAddon = industryType === 'visual' 
-    ? `
-      [비주얼 업종 특화 규칙 - 맛집/펜션/카페 등]
-      1. 사진이 텍스트보다 중요합니다. 각 섹션의 'visualAdvice'에는 다음 항목을 필수 포함하세요:
-         - 'imageOrVideo': 구체적인 촬영 대상
-         - 'description': 사진의 무드와 색감
-         - 'lighting': 조명 가이드
-         - 'composition': 추천 구도
-    ` 
-    : `[일반 비즈니스 규칙] 전문성과 신뢰감을 주는 비주얼과 카피를 제안하세요.`;
+    ? `[비주얼 업종 특화] 사진 구도, 조명, 색감 정보를 visualAdvice에 상세히 포함하세요.` 
+    : `[일반 비즈니스] 전문성과 신뢰도를 높이는 카피 위주로 구성하세요.`;
 
   const prompt = `
-    당신은 세계 최고의 브랜딩 기획자이자 SEO 및 UX/UI 전문가입니다. 
-    제공된 [원본 데이터]와 [키워드: ${seoKeywords}]를 바탕으로 고퀄리티 홈페이지 기획서를 작성하세요.
-
+    당신은 세계 최고의 UX 기획자입니다.
+    제공된 데이터와 키워드(${seoKeywords})를 바탕으로 고퀄리티 홈페이지 기획서를 작성하세요.
     ${visualPromptAddon}
-
-    [애니메이션 및 UX 지침]
-    각 섹션의 'integratedDirective.animation' 필드에 Fade-in, Slide-up, Zoom-in, Parallax 중 하나를 선택해 이유와 함께 적으세요.
-
-    [인터랙션(uxInteraction) 규칙]
-    각 섹션마다 사용자의 참여를 유도하는 구체적인 마이크로 인터랙션을 제안하세요.
-
-    [핵심 규칙]
-    1. **누락 금지**: 선택된 섹션들을 반드시 포함하세요.
-    2. **비교 섹션(comparison)**: 반드시 'comparisonItems' 데이터를 생성하세요.
-    3. **3 Copy Sets**: 각 섹당 3가지의 카피 전략을 제안하세요.
-
     응답은 반드시 지정된 JSON 포맷으로 한국어로만 출력하세요.
   `;
 
@@ -122,26 +97,11 @@ export const generateBlueprint = async (
                     },
                     required: ["type", "description", "benefit"]
                   },
-                  comparisonItems: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: { feature: { type: Type.STRING }, us: { type: Type.STRING }, competitorA: { type: Type.STRING } }
-                    }
-                  },
-                  faqItems: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } }
-                    }
-                  },
                   visualAdvice: {
                     type: Type.OBJECT,
                     properties: { 
                       imageOrVideo: { type: Type.STRING }, 
                       description: { type: Type.STRING }, 
-                      motionEffect: { type: Type.STRING },
                       lighting: { type: Type.STRING },
                       composition: { type: Type.STRING }
                     }
@@ -151,10 +111,7 @@ export const generateBlueprint = async (
                     properties: {
                       animation: { type: Type.STRING },
                       buttonStyle: { type: Type.STRING },
-                      typography: { type: Type.STRING },
-                      divider: { type: Type.STRING },
-                      layoutStrategy: { type: Type.STRING },
-                      compositionAndShapes: { type: Type.STRING }
+                      typography: { type: Type.STRING }
                     }
                   }
                 },
@@ -168,19 +125,16 @@ export const generateBlueprint = async (
     });
 
     const result = response.text;
-    if (!result) throw new Error("AI로부터 응답을 받지 못했습니다.");
+    if (!result) throw new Error("No response from AI");
 
-    const cleanedJson = extractJson(result);
-    const blueprint = JSON.parse(cleanedJson) as Blueprint;
-    
+    const blueprint = JSON.parse(extractJson(result)) as Blueprint;
     blueprint.primaryColor = primaryColor;
     blueprint.selectedStyle = selectedStyle;
-    blueprint.seoKeywords = seoKeywords;
     blueprint.industryType = industryType;
     
     return blueprint;
-  } catch (error: any) {
-    console.error("Gemini Generation Error:", error);
+  } catch (error) {
+    console.error("Gemini Error:", error);
     throw error;
   }
 };
