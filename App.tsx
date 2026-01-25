@@ -4,7 +4,7 @@ import { SECTIONS, SectionConfig, Blueprint } from './types';
 import { generateBlueprint, testConnection } from './services/geminiService';
 import SectionSelector from './components/SectionSelector';
 import LandingPagePreview from './components/LandingPagePreview';
-import { Loader2, Sparkles, Send, FileUp, Palette, Wand2, Globe, Info, MessageSquarePlus, X, FileText, UploadCloud, Map, Key, AlertCircle, RefreshCcw, Camera, Briefcase, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Loader2, Sparkles, Send, FileUp, Palette, Wand2, Globe, Info, X, FileText, UploadCloud, Map, Key, AlertCircle, RefreshCcw, Camera, Briefcase, ShieldCheck, Zap, ArrowRight, ExternalLink } from 'lucide-react';
 
 const STYLES = ['고급스러움', '전문적인/기업형', '레트로/빈티지', '귀여운/친근한', '미니멀/모던'];
 
@@ -34,19 +34,18 @@ const App: React.FC = () => {
     "최종 마스터 플랜 검토 및 출력 준비 중..."
   ];
 
-  // 초기 로드 시 키 연결 여부 확인
+  // 초기 로드 시 키 연결 상태 확인
   useEffect(() => {
     const checkInitialKey = async () => {
       if (window.aistudio?.hasSelectedApiKey) {
         const isSelected = await window.aistudio.hasSelectedApiKey();
         if (isSelected) {
-          // 이미 키가 선택되어 있다면 검증 시도
           setIsVerifying(true);
           const ok = await testConnection();
           setHasApiKey(ok);
           setIsVerifying(false);
           if (!ok) {
-            setErrorStatus("이전에 연결된 API 키가 유효하지 않습니다. 다시 설정해주세요.");
+            setErrorStatus("연결된 API 키가 유효하지 않습니다. 유료 계정의 키인지 확인해주세요.");
           }
         }
       }
@@ -71,7 +70,7 @@ const App: React.FC = () => {
       setErrorStatus(null);
       await window.aistudio.openSelectKey();
       
-      // 키 선택 창이 닫힌 후 즉시 연결 테스트 실행
+      // 키 선택 후 즉시 연결 테스트 수행
       setIsVerifying(true);
       const isConnected = await testConnection();
       setIsVerifying(false);
@@ -80,7 +79,7 @@ const App: React.FC = () => {
         setHasApiKey(true);
         setErrorStatus(null);
       } else {
-        setErrorStatus("API 키 연결에 실패했습니다. 유효한 API 키인지, 혹은 유료 프로젝트인지 확인 후 다시 시도해주세요.");
+        setErrorStatus("API 키 연결에 실패했습니다. 유료 프로젝트의 키를 선택했는지 확인해주세요.");
         setHasApiKey(false);
       }
     }
@@ -110,7 +109,7 @@ const App: React.FC = () => {
     }
 
     if (!hasApiKey) {
-      setErrorStatus("기획서를 생성하려면 API 키 연결이 완료되어야 합니다.");
+      setErrorStatus("기획서를 생성하려면 유효한 API 키가 연결되어야 합니다.");
       handleSelectKey();
       return;
     }
@@ -134,14 +133,11 @@ const App: React.FC = () => {
     } catch (error: any) {
       console.error("Blueprint generation failed:", error);
       const errorMsg = error.message || "";
-      
       if (errorMsg.includes("Requested entity was not found")) {
-        setErrorStatus("선택하신 API 키에 Pro 모델 사용 권한이 없습니다. 유료 프로젝트의 API 키를 선택해주세요.");
+        setErrorStatus("API 키에 권한이 없습니다. 유료 결제가 활성화된 프로젝트의 키를 사용해주세요.");
         setHasApiKey(false);
-      } else if (errorMsg.includes("429")) {
-        setErrorStatus("API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.");
       } else {
-        setErrorStatus("기획서 생성 중 오류가 발생했습니다. API 연결 상태를 확인하고 다시 시도해주세요.");
+        setErrorStatus("기획서 생성 중 오류가 발생했습니다. API 연결 상태를 확인해주세요.");
       }
     } finally {
       setLoading(false);
@@ -184,7 +180,7 @@ const App: React.FC = () => {
         </div>
 
         {errorStatus && (
-          <div className="mb-8 p-5 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3 shadow-sm animate-pulse">
+          <div className="mb-8 p-5 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
             <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-xs font-black text-rose-900 leading-relaxed mb-2">{errorStatus}</p>
@@ -192,7 +188,7 @@ const App: React.FC = () => {
                 onClick={handleSelectKey} 
                 className="text-[10px] font-black text-white bg-rose-500 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-rose-600 transition-colors shadow-sm"
               >
-                <RefreshCcw className="w-3 h-3" /> API 키 다시 연결하기
+                <RefreshCcw className="w-3 h-3" /> 다시 연결하기
               </button>
             </div>
           </div>
@@ -329,23 +325,72 @@ const App: React.FC = () => {
       </aside>
 
       <main className="flex-1 overflow-y-auto p-4 md:p-12 lg:p-20 relative bg-[#fcfcfc]">
+        {/* API 연결 배너 (키가 없을 때만 표시) */}
+        {!hasApiKey && (
+          <div className="max-w-3xl mx-auto mb-16 animate-in zoom-in-95 duration-500">
+            <div className="bg-indigo-600 rounded-[3rem] p-10 md:p-16 text-white shadow-2xl shadow-indigo-200 relative overflow-hidden group">
+              <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500 rounded-full blur-3xl opacity-50 group-hover:scale-125 transition-transform duration-700"></div>
+              <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-indigo-700 rounded-full blur-3xl opacity-50 group-hover:scale-125 transition-transform duration-700"></div>
+              
+              <div className="relative z-10 flex flex-col items-center text-center">
+                <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-3xl flex items-center justify-center mb-8 border border-white/20 shadow-xl">
+                  <Zap className="w-10 h-10 text-white fill-white" />
+                </div>
+                
+                <h2 className="text-3xl md:text-4xl font-black mb-4 tracking-tight leading-tight">
+                  Premium AI 기획 환경을<br/>지금 활성화하세요
+                </h2>
+                <p className="text-indigo-100 text-lg font-bold mb-10 max-w-md leading-relaxed">
+                  Vercel 배포 버전은 개인 API 키를 사용합니다.<br/>
+                  본인의 Google Gemini API 키를 연결하여 독점적인 기획 기능을 시작하세요.
+                </p>
+                
+                <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
+                  <button 
+                    onClick={handleSelectKey}
+                    className="px-10 py-5 bg-white text-indigo-600 rounded-2xl font-black text-lg shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3"
+                  >
+                    <Key className="w-5 h-5" /> 
+                    API 키 연결하기
+                  </button>
+                  <a 
+                    href="https://ai.google.dev/gemini-api/docs/billing" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="px-8 py-5 bg-indigo-700/50 backdrop-blur-sm border border-white/10 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors"
+                  >
+                    API 키 발급 안내 <ExternalLink className="w-4 h-4" />
+                  </a>
+                </div>
+                
+                <p className="mt-8 text-[11px] font-medium text-indigo-200 uppercase tracking-widest flex items-center gap-2">
+                  <ShieldCheck className="w-3.5 h-3.5" /> Your key is stored securely in your browser
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {blueprint ? <LandingPagePreview blueprint={blueprint} /> : (
           <div className="h-full flex flex-col items-center justify-center text-center px-10">
-            <div className="w-32 h-32 bg-slate-100 rounded-[3.5rem] flex items-center justify-center mb-10 shadow-inner group">
-              <Map className="w-14 h-14 text-slate-300 group-hover:scale-110 transition-transform" />
+            <div className={`w-32 h-32 rounded-[3.5rem] flex items-center justify-center mb-10 shadow-inner group transition-colors ${hasApiKey ? 'bg-indigo-50' : 'bg-slate-100'}`}>
+              <Map className={`w-14 h-14 group-hover:scale-110 transition-transform ${hasApiKey ? 'text-indigo-400' : 'text-slate-300'}`} />
             </div>
             <h2 className="text-3xl font-black text-slate-900 mb-6 tracking-tight uppercase">Strategic AI Navigator</h2>
             <p className="text-lg text-slate-400 font-bold leading-relaxed max-w-xl mx-auto">
               브랜드 데이터를 입력하고 독점적인 마스터 플랜을 설계하세요.<br/>
-              <span className="text-indigo-500">API 키가 연결된 상태에서 모든 기능이 활성화됩니다.</span>
+              {hasApiKey ? (
+                <span className="text-green-500 font-black flex items-center justify-center gap-2 mt-2">
+                  <ShieldCheck className="w-5 h-5" /> API 연결 완료. 기획을 시작할 준비가 되었습니다.
+                </span>
+              ) : (
+                <span className="text-indigo-500">배너의 버튼을 클릭하여 API 키를 연결해주세요.</span>
+              )}
             </p>
-            {!hasApiKey && (
-              <button 
-                onClick={handleSelectKey}
-                className="mt-8 flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:scale-105 transition-transform"
-              >
-                <Key className="w-4 h-4" /> 지금 API 키 연결하기
-              </button>
+            {hasApiKey && !blueprint && (
+              <div className="mt-10 animate-bounce">
+                <ArrowRight className="w-8 h-8 text-indigo-200 rotate-90 mx-auto" />
+              </div>
             )}
           </div>
         )}

@@ -15,19 +15,20 @@ const extractJson = (text: string): string => {
 
 /**
  * API 키 연결 테스트용 함수
- * 간단한 응답을 요청하여 키의 유효성과 권한을 확인합니다.
+ * 주입된 API 키를 사용하여 가장 가벼운 모델로 응답을 확인합니다.
  */
 export const testConnection = async (): Promise<boolean> => {
   try {
-    // window.aistudio에서 주입한 최신 API 키 사용
+    // window.aistudio.openSelectKey() 이후 process.env.API_KEY가 업데이트되므로 
+    // 매번 새로운 인스턴스를 생성하여 테스트해야 합니다.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: "Connection Test. Reply with 'OK'.",
+      contents: "ping",
     });
     return !!response.text;
   } catch (error) {
-    console.error("Connection test failed:", error);
+    console.error("API Key Test Failed:", error);
     return false;
   }
 };
@@ -43,6 +44,7 @@ export const generateBlueprint = async (
   additionalInstructions?: string,
   industryType: 'general' | 'visual' = 'general'
 ): Promise<Blueprint> => {
+  // 생성 시점에 항상 최신 주입된 API 키 사용
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const enabledSections = selectedSections.filter(s => s.enabled);
@@ -74,7 +76,7 @@ export const generateBlueprint = async (
     [핵심 규칙]
     1. **누락 금지**: 선택된 섹션들을 반드시 포함하세요.
     2. **비교 섹션(comparison)**: 반드시 'comparisonItems' 데이터를 생성하세요.
-    3. **3 Copy Sets**: 각 섹션당 3가지의 카피 전략을 제안하세요.
+    3. **3 Copy Sets**: 각 섹당 3가지의 카피 전략을 제안하세요.
 
     응답은 반드시 지정된 JSON 포맷으로 한국어로만 출력하세요.
   `;
