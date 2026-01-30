@@ -2,63 +2,82 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Blueprint, SectionConfig } from "../types";
 
+// 간단한 키 난독화 처리 (로컬 저장용)
+export const keyManager = {
+  save: (key: string) => {
+    const encoded = btoa(key).split('').reverse().join('');
+    localStorage.setItem('_aimb_vault', encoded);
+  },
+  load: (): string | null => {
+    const encoded = localStorage.getItem('_aimb_vault');
+    if (!encoded) return null;
+    try {
+      return atob(encoded.split('').reverse().join(''));
+    } catch {
+      return null;
+    }
+  },
+  clear: () => localStorage.removeItem('_aimb_vault')
+};
+
 const extractJson = (text: string): string => {
   const codeBlockRegex = /```json\s?([\s\S]*?)\s?```/;
   const match = text.match(codeBlockRegex);
   if (match) return match[1].trim();
-
   const braceMatch = text.match(/\{[\s\S]*\}/);
   if (braceMatch) return braceMatch[0].trim();
-
   return text.trim();
 };
 
-/**
- * API 키 연결 테스트용 함수
- */
-export const testConnection = async (): Promise<boolean> => {
+export const testConnection = async (apiKey: string): Promise<boolean> => {
+  if (!apiKey) return false;
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+    const ai = new GoogleGenAI({ apiKey });
+    // 무료 키에서도 잘 작동하는 경량 모델로 테스트
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: "ping",
+      contents: "Connection Test",
     });
     return !!response.text;
   } catch (error) {
-    console.error("API Key Verification Failed:", error);
+    console.error("Connection Test Error:", error);
     return false;
   }
 };
 
 export const generateBlueprint = async (
+  apiKey: string,
   userInput: string,
   selectedSections: SectionConfig[],
   primaryColor: string,
   selectedStyle: string,
-  seoKeywords: string,
   brandName?: string,
   fileData?: { mimeType: string; data: string },
-  additionalInstructions?: string,
   industryType: 'general' | 'visual' = 'general'
 ): Promise<Blueprint> => {
-  // 호출 직전에 인스턴스 생성하여 주입된 키가 즉시 반영되도록 함
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const ai = new GoogleGenAI({ apiKey });
   
-  const enabledSections = selectedSections.filter(s => s.enabled);
   const visualPromptAddon = industryType === 'visual' 
-    ? `[비주얼 업종 특화] 사진 구도, 조명, 색감 정보를 visualAdvice에 상세히 포함하세요.` 
-    : `[일반 비즈니스] 전문성과 신뢰도를 높이는 카피 위주로 구성하세요.`;
+    ? `[비주얼 특화 업종] 구도(composition), 조명(lighting), 톤앤매너를 시각적으로 구체화하세요.` 
+    : `[일반 비즈니스] 논리적인 설득과 전문성 있는 카피 위주로 구성하세요.`;
 
   const prompt = `
-    당신은 세계 최고의 UX 기획자입니다.
-    제공된 데이터와 키워드(${seoKeywords})를 바탕으로 고퀄리티 홈페이지 기획서를 작성하세요.
+    당신은 세계적인 UX 전략가입니다.
+    브랜드명: ${brandName || '미지정'}
+    입력 데이터: ${userInput}
+    선택된 섹션: ${selectedSections.filter(s => s.enabled).map(s => s.name).join(', ')}
+    스타일: ${selectedStyle}
+    주요 색상: ${primaryColor}
+
     ${visualPromptAddon}
-    응답은 반드시 지정된 JSON 포맷으로 한국어로만 출력하세요.
+    
+    위 데이터를 바탕으로 고퀄리티 홈페이지 기획서를 작성하세요. 
+    반드시 한국어로, 제공된 JSON 스키마에 맞춰 응답하세요.
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview', 
+      model: 'gemini-3-flash-preview', // 무료/유료 범용성이 가장 높은 모델 사용
       contents: fileData 
         ? { parts: [{ text: prompt }, { inlineData: fileData }] } 
         : prompt,
@@ -90,12 +109,7 @@ export const generateBlueprint = async (
                   detailedAnalysis: { type: Type.STRING },
                   uxInteraction: {
                     type: Type.OBJECT,
-                    properties: {
-                      type: { type: Type.STRING },
-                      description: { type: Type.STRING },
-                      benefit: { type: Type.STRING }
-                    },
-                    required: ["type", "description", "benefit"]
+                    properties: { type: Type.STRING, description: { type: Type.STRING }, benefit: { type: Type.STRING } }
                   },
                   visualAdvice: {
                     type: Type.OBJECT,
@@ -108,14 +122,10 @@ export const generateBlueprint = async (
                   },
                   integratedDirective: {
                     type: Type.OBJECT,
-                    properties: {
-                      animation: { type: Type.STRING },
-                      buttonStyle: { type: Type.STRING },
-                      typography: { type: Type.STRING }
-                    }
+                    properties: { animation: { type: Type.STRING }, buttonStyle: { type: Type.STRING }, typography: { type: Type.STRING } }
                   }
                 },
-                required: ["sectionId", "title", "copySets", "detailedAnalysis", "visualAdvice", "integratedDirective", "uxInteraction"]
+                required: ["sectionId", "title", "copySets", "detailedAnalysis", "visualAdvice", "integratedDirective"]
               }
             }
           },
@@ -124,17 +134,13 @@ export const generateBlueprint = async (
       }
     });
 
-    const result = response.text;
-    if (!result) throw new Error("No response from AI");
-
-    const blueprint = JSON.parse(extractJson(result)) as Blueprint;
+    const blueprint = JSON.parse(extractJson(response.text)) as Blueprint;
     blueprint.primaryColor = primaryColor;
     blueprint.selectedStyle = selectedStyle;
     blueprint.industryType = industryType;
-    
     return blueprint;
   } catch (error) {
-    console.error("Gemini Error:", error);
+    console.error("Generation Error:", error);
     throw error;
   }
 };
